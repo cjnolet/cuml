@@ -252,7 +252,10 @@ class PCAMG(PCA):
                 params,
                 True)
 
+            print("Syncing handle")
             self.handle.sync()
+            print("Freeing data array")
+
             self._freeFloatD(data, arr_interfaces)
 
         else:
@@ -271,9 +274,14 @@ class PCAMG(PCA):
                 params,
                 True)
 
+            print("Syncing handle")
+
             self.handle.sync()
+
+            print("Freeing data array")
             self._freeDoubleD(data, arr_interfaces)
 
+        print("Freeing rank size pairs")
         for idx, rankSize in enumerate(partsToRanks):
             free(<RankSizePair*>rankSizePair[idx])
         free(<RankSizePair**>rankSizePair)
@@ -281,14 +289,17 @@ class PCAMG(PCA):
         # Keeping the additional dataframe components during cuml 0.8.
         # See github issue #749
 
+        print("assigning components: " + str(np.array(self.components_ary)))
         self.components_ = cudf.DataFrame.from_gpu_matrix(self.components_ary)
 
         if isinstance(X, cudf.DataFrame):
             del X_m
 
+        print("DONE!")
         if _transform:
             return cudf.DataFrame.from_gpu_matrix(trans_input_)
         else:
+            print("RETURNING!")
             return self
 
 
