@@ -155,8 +155,9 @@ class KMeans(object):
         df = concat(dfs)
         return model.score(df)
 
-    def raise_exception_from_futures(futures):
-        """Raises a RuntimeError if any of the futures indicates an exception"""
+    def raise_exception_from_futures(self, futures):
+        """Raises a RuntimeError if any of the futures indicates
+        an exception"""
         errs = [f.exception() for f in futures if f.exception()]
         if errs:
             raise RuntimeError("%d of %d worker jobs failed: %s" % (
@@ -187,7 +188,7 @@ class KMeans(object):
             for idx, wf in enumerate(gpu_futures.items())]
 
         wait(kmeans_fit)
-        raise_exception_from_futures(kmeans_fit)
+        self.raise_exception_from_futures(kmeans_fit)
 
         comms.destroy()
 
@@ -212,7 +213,7 @@ class KMeans(object):
             workers=[wf[0]],
             key="%s-%s" % (key, idx))
             for idx, wf in enumerate(gpu_futures.items())]
-        raise_exception_from_futures(kmeans_predict)
+        self.raise_exception_from_futures(kmeans_predict)
 
         return to_dask_cudf(kmeans_predict)
 
@@ -254,7 +255,7 @@ class KMeans(object):
             workers=[wf[0]],
             key="%-%s" % (key, idx)).result()
                   for idx, wf in enumerate(gpu_futures.items())]
-        raise_exception_from_futures(scores)
+        self.raise_exception_from_futures(scores)
 
         return np.sum(scores)
 
