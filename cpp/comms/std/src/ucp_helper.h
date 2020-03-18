@@ -48,11 +48,13 @@ static void send_handle(void *request, ucs_status_t status) {
   struct ucp_request *req = (struct ucp_request *)request;
   printf("Send Completed %d\n", UCS_PTR_STATUS(request));
   req->finished = 1;
-  req->status = UCS_PTR_STATUS(request);
+//  req->status = UCS_PTR_STATUS(request);
 
-  if(UCS_PTR_IS_ERR(req)) {
-      req->failed = 1;
-  }
+ // if(UCS_PTR_IS_ERR(req)) {
+
+  //    printf("SETTING SEND STATUS TO FAILED!\n");
+   //   req->failed = 1;
+ // }
 }
 
 /**
@@ -63,11 +65,12 @@ static void recv_handle(void *request, ucs_status_t status,
   struct ucp_request *req = (struct ucp_request *)request;
   printf("Receive Completed %d\n", UCS_PTR_STATUS(req));
   req->finished = 1;
-  req->status = UCS_PTR_STATUS(request);
+ // req->status = UCS_PTR_STATUS(request);
 
-  if(UCS_PTR_IS_ERR(req)) {
-      req->failed = 1;
-  }
+//  if(UCS_PTR_IS_ERR(req)) {
+//       printf("SETTING SEND STATUS TO FAILED!\n");
+//      req->failed = 1;
+//  }
 }
 
 void load_ucp_handle(struct comms_ucp_handle *ucp_handle) {
@@ -138,55 +141,74 @@ void init_comms_ucp_handle(struct comms_ucp_handle *handle) {
  * @brief Frees any memory underlying the given ucp request object
  */
 void free_ucp_request(struct comms_ucp_handle *ucp_handle, void *request) {
-
-  ucp_request *req = (struct ucp_request*)request;
-  req->finished = 0;
-  req->failed = 0;
-  req->status = 0;
-  req->other_rank = -1;
-  if(req->needs_release == 1) {
-	req->needs_release = 0;
-        (*(ucp_handle->req_free_func))(req);
-  } else {
-        free(req);
-  }
+printf("Inside free_ucp_request\n");
+//  ucp_request *req = (struct ucp_request*)request;
+//  req->finished = 0;
+  //req->failed = 0;
+  //req->status = 0;
+  //req->other_rank = -1;
+//  if(req->needs_release == 1) {
+//	  printf("Freeing ucp request\n");
+//	req->needs_release = 0;
+       (*(ucp_handle->req_free_func))(request);
+ // } else {
+//	  printf("Manually freeing request: %d\n", req->needs_release);
+//	  free(req);
+  //}
 }
 
 int ucp_progress(struct comms_ucp_handle *ucp_handle, ucp_worker_h worker) {
   return (*(ucp_handle->worker_progress_func))(worker);
 }
 
-struct ucp_request *process_ucp_request(struct ucp_request *req, int other_rank) {
+struct cuml_request *process_ucp_request(struct ucp_request *req, int other_rank) {
 
-	req->other_rank = other_rank;
-	req->status = UCS_PTR_STATUS(req);
+
+        struct cuml_request *cuml_req = (struct cuml_request*)malloc(sizeof(struct cuml_request));
+
 
 	// The send operation completed immediately
-	if(UCS_PTR_STATUS((ucs_status_ptr_t)req) == UCS_OK) {
-	    req = (struct ucp_request *)malloc(sizeof(struct ucp_request));
-	    req->finished = 1;
-	    req->needs_release = 0;
+	if(UCS_PTR_STATUS(req) == UCS_OK) {
+	 //   printf("Send op completed already!\n");
+	  //  req = (struct ucp_request *)malloc(sizeof(struct ucp_request));
+	   // req->failed = 0;
+//	    req->finished = 1;
+	    cuml_req->needs_release = false;
+//	    req->needs_release = 0;
 	}
 
 	// The send operation failed
 	else if(UCS_PTR_IS_ERR(req)) {
-	    req->finished = 1;
-	    req->needs_release = 0;
-            req->failed = 1;
+	    printf("send op is error!\n");
+	    //req->finished = 1;
+	    cuml_req->needs_release =false;
+//	    req->needs_release = 0;
+ //           req->failed = 1;
 	}
 
 	// Operation scheduled for send and will be completed by handler.
 	else {
-            req->needs_release = 1;
+	    printf("Op needs release, will go through callback\n");
+   //         req->needs_release = 1;
+	    //req->failed = 0;
+	    cuml_req->needs_release = true;
+	    cuml_req->req = req;
 	}
+       // printf("Inside process request\n");
+     //   req->other_rank = other_rank;
 
-	return req;
+       // printf("About to set status\n");
+       // req->status = UCS_PTR_STATUS(req);
+
+
+
+	return cuml_req;
 }
 
 /**
  * @brief Asynchronously send data to the given endpoint using the given tag
  */
-struct ucp_request *ucp_isend(struct comms_ucp_handle *ucp_handle,
+struct cuml_request *ucp_isend(struct comms_ucp_handle *ucp_handle,
                               ucp_ep_h ep_ptr, const void *buf, int size,
                               int tag, ucp_tag_t tag_mask, int rank) {
   ucp_tag_t ucp_tag = ((uint32_t)rank << 31) | (uint32_t)tag;
@@ -202,7 +224,7 @@ struct ucp_request *ucp_isend(struct comms_ucp_handle *ucp_handle,
 /**
  * @bried Asynchronously receive data from given endpoint with the given tag.
  */
-struct ucp_request *ucp_irecv(struct comms_ucp_handle *ucp_handle,
+struct cuml_request *ucp_irecv(struct comms_ucp_handle *ucp_handle,
                               ucp_worker_h worker, ucp_ep_h ep_ptr, void *buf,
                               int size, int tag, ucp_tag_t tag_mask,
                               int sender_rank) {
