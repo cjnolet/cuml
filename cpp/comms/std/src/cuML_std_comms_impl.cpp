@@ -299,11 +299,13 @@ void cumlStdCommunicator_impl::isend(const void *buf, int size, int dest,
   get_request_id(request);
   ucp_ep_h ep_ptr = (*_ucp_eps)[dest];
 
-  struct ucx_context *ucp_request =
+  struct ucp_request *req =
     ucp_isend((struct comms_ucp_handle *)_ucp_handle, ep_ptr, buf, size, tag,
               default_tag_mask, getRank());
 
-  _requests_in_flight.insert(std::make_pair(*request, ucp_request));
+  std::cout << getRank() << " created send req " << req << std::endl;
+
+  _requests_in_flight.insert(std::make_pair(*request, req));
 #endif
 }
 
@@ -323,11 +325,13 @@ void cumlStdCommunicator_impl::irecv(void *buf, int size, int source, int tag,
 
   if (source == CUML_ANY_SOURCE) tag_mask = any_rank_tag_mask;
 
-  struct ucx_context *ucp_request =
+  struct ucp_request *req =
     ucp_irecv((struct comms_ucp_handle *)_ucp_handle, _ucp_worker, ep_ptr, buf,
               size, tag, tag_mask, source);
 
-  _requests_in_flight.insert(std::make_pair(*request, ucp_request));
+  std::cout << getRank() << " create recv req " << req << std::endl;
+
+  _requests_in_flight.insert(std::make_pair(*request, req));
 #endif
 }
 
@@ -339,7 +343,7 @@ void cumlStdCommunicator_impl::waitall(int count,
   ASSERT(_ucp_worker != nullptr,
          "ERROR: UCX comms not initialized on communicator.");
 
-  std::vector<struct ucx_context *> requests;
+  std::vector<struct ucp_request *> requests;
   requests.reserve(count);
 
   for (int i = 0; i < count; ++i) {
@@ -351,23 +355,43 @@ void cumlStdCommunicator_impl::waitall(int count,
     _requests_in_flight.erase(req_it);
   }
 
-  while (requests.size() > 0) {
-    for (std::vector<struct ucx_context *>::iterator it = requests.begin();
-         it != requests.end();) {
-      ucp_progress((struct comms_ucp_handle *)_ucp_handle, _ucp_worker);
 
+  int counter = 5000000;
+  while (requests.size() > 1) {
+
+    counter -=1;
+      	
+    for (std::vector<struct ucp_request *>::iterator it = requests.begin();
+         it != requests.end();) {
+      while(ucp_progress((struct comms_ucp_handle *)_ucp_handle, _ucp_worker) != 0) {}
+      
       auto req = *it;
-      if (req->completed == 1) {
+
+      if(counter == 0) {
+
+	      ucs_status_t raw_status = UCS_PTR_RAW_STATUS(req);
+	      std::cout << "ucs PTR is endpoint error: " << UCS_STATUS_PTR(raw_status) << std::endl;
+	      std::cout << "ucs PTR is link error: " << UCS_STATUS_IS_ERR(raw_status) << std::endl;
+        counter = 5000000;
+
+      }
+
+      ASSERT(req->failed == 0, "Request failed");
+
+
+      if (req->finished == 1) {
         std::cout << getRank() << ": request completed: " << req << " "
                   << requests.size()
                   << " requests to go. needs_release=" << req->needs_release
                   << std::endl;
-        req->completed = 0;
-        if (req->needs_release)
-          free_ucp_request((struct comms_ucp_handle *)_ucp_handle, req);
-        it = requests.erase(it);
-      } else
-        ++it;
+        req->finished = 0;
+	it = requests.erase(it);
+        free_ucp_request((struct comms_ucp_handle *)_ucp_handle, req);
+
+      } 
+
+       ++it;
+      }
     }
   }
 
