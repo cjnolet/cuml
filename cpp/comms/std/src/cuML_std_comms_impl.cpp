@@ -385,7 +385,7 @@ void cumlStdCommunicator_impl::waitall(int count,
                   << " requests to go. needs_release=" << req->needs_release
                   << std::endl;
         req->finished = 0;
-	it = requests.erase(it);
+        it = requests.erase(it);
         free_ucp_request((struct comms_ucp_handle *)_ucp_handle, req);
 
       } 
@@ -393,7 +393,6 @@ void cumlStdCommunicator_impl::waitall(int count,
        ++it;
       }
     }
-  }
 
 #endif
 }
