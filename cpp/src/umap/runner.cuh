@@ -196,11 +196,12 @@ void _fit(const cumlHandle &handle,
   COO<T> tmp_coo(d_alloc, stream);
 
   /**
-   * Run Fuzzy simplicial set
+   * Run Fuzzy simplicial set. Output will be a sorted COO
    */
   //int nnz = n*k*2;
   FuzzySimplSet::run<TPB_X, T>(n, knn_indices, knn_dists, params->n_neighbors,
                                &tmp_coo, params, d_alloc, stream);
+
   CUDA_CHECK(cudaPeekAtLastError());
 
   MLCommon::Sparse::coo_remove_zeros<TPB_X, T>(&tmp_coo, &rgraph_coo, d_alloc,

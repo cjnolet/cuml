@@ -809,7 +809,7 @@ void coo_symmetrize(COO<T> *in, COO<T> *out,
 
   sorted_coo_to_csr(in, in_row_ind.data(), d_alloc, stream);
 
-  out->allocate(in->nnz * 2, in->n_rows, in->n_cols, true, stream);
+  out->allocate(in->nnz * 2, in->n_rows, in->n_rows, true, stream);
 
   coo_symmetrize_kernel<TPB_X, T><<<grid, blk, 0, stream>>>(
     in_row_ind.data(), in->rows(), in->cols(), in->vals(), out->rows(),

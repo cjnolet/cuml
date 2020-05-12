@@ -105,6 +105,20 @@ inline void cusparsecoo2csr(cusparseHandle_t handle, const int* cooRowInd,
   CUSPARSE_CHECK(cusparseXcoo2csr(handle, cooRowInd, nnz, m, csrRowPtr,
                                   CUSPARSE_INDEX_BASE_ZERO));
 }
+
+template <typename T>
+void cusparsecsr2coo(cusparseHandle_t handle, const T* csrRowPtr, int nnz,
+                     int m, T* cooRowInd, cudaStream_t stream);
+template <>
+inline void cusparsecsr2coo(cusparseHandle_t handle, const int* csrRowPtr,
+                            int nnz, int m, int* cooRowInd,
+                            cudaStream_t stream) {
+  CUSPARSE_CHECK(cusparseSetStream(handle, stream));
+  CUSPARSE_CHECK(cusparseXcsr2coo(handle, csrRowPtr, nnz, m, cooRowInd,
+                                  CUSPARSE_INDEX_BASE_ZERO));
+}
+
+
 /** @} */
 
 /**
@@ -124,6 +138,8 @@ inline size_t cusparsecoosort_bufferSizeExt(cusparseHandle_t handle, int m,
   CUSPARSE_CHECK(cusparseSetStream(handle, stream));
   CUSPARSE_CHECK(
     cusparseXcoosort_bufferSizeExt(handle, m, n, nnz, cooRows, cooCols, &val));
+
+
   return val;
 }
 
@@ -139,6 +155,112 @@ inline void cusparsecoosortByRow(cusparseHandle_t handle, int m, int n, int nnz,
   CUSPARSE_CHECK(
     cusparseXcoosortByRow(handle, m, n, nnz, cooRows, cooCols, P, pBuffer));
 }
+
+inline void cusparseCreateMatDescr(cusparseMatDescr_t &descr) {
+	CUSPARSE_CHECK(cusparseCreateMatDescr(&descr));
+    cusparseSetMatType(descr,CUSPARSE_MATRIX_TYPE_GENERAL);
+    cusparseSetMatIndexBase(descr,CUSPARSE_INDEX_BASE_ZERO);
+}
+
+
+inline size_t cusparseScsrgeam2_bufferSizeExt(cusparseHandle_t handle, int m, int n, const float *alpha,
+		int nnzA, const float *csrSortedValA, const int *csrSortedRowPtrA,
+		const int * csrSortedColIndA, const float *beta,
+		int nnzB, const float *csrSortedValB, const int *csrSortedRowPtrB,
+		const int *csrSortedColIndB,
+		const float *csrSortedValC, const int *csrSortedRowPtrC, const int *csrSortedColIndC,
+		cudaStream_t stream) {
+
+	cusparseMatDescr_t descr = 0;
+	CUSPARSE_CHECK(cusparseCreateMatDescr(&descr));
+    cusparseSetMatType(descr,CUSPARSE_MATRIX_TYPE_GENERAL);
+    cusparseSetMatIndexBase(descr,CUSPARSE_INDEX_BASE_ZERO);
+
+  CUSPARSE_CHECK(cusparseSetStream(handle, stream));
+
+  size_t val;
+  CUSPARSE_CHECK(cusparseScsrgeam2_bufferSizeExt(handle, m, n,
+			alpha, descr, nnzA, csrSortedValA, csrSortedRowPtrA, csrSortedColIndA,
+			beta, descr, nnzB, csrSortedValB, csrSortedRowPtrB, csrSortedColIndB,
+			descr, csrSortedValC, csrSortedRowPtrC, csrSortedColIndC, &val));
+
+  CUDA_CHECK(cudaStreamSynchronize(stream));
+
+  return val;
+
+}
+
+
+
+inline int cusparsecsrgeam2Nnz(cusparseHandle_t handle,
+                     int                      m,
+                     int                      n,
+                     int                      nnzA,
+                     const int*               csrSortedRowPtrA,
+                     const int*               csrSortedColIndA,
+                     int                      nnzB,
+                     const int*               csrSortedRowPtrB,
+                     const int*               csrSortedColIndB,
+                     int*                     csrSortedRowPtrC,
+                     void *					  workspace,
+                     // not completely sure if this is needed, but
+                     // adding anyways
+                     cudaStream_t stream) {
+
+	cusparseMatDescr_t descr = 0;
+	CUSPARSE_CHECK(cusparseCreateMatDescr(&descr));
+    cusparseSetMatType(descr,CUSPARSE_MATRIX_TYPE_GENERAL);
+    cusparseSetMatIndexBase(descr,CUSPARSE_INDEX_BASE_ZERO);
+
+
+	  int val;
+	  CUSPARSE_CHECK(cusparseSetStream(handle, stream));
+	  CUSPARSE_CHECK(cusparseXcsrgeam2Nnz(handle, m, n,
+			  descr, nnzA, csrSortedRowPtrA, csrSortedColIndA,
+			  descr, nnzB, csrSortedRowPtrB, csrSortedColIndB,
+              descr, csrSortedRowPtrC, &val, workspace));
+
+	  CUDA_CHECK(cudaStreamSynchronize(stream));
+
+	  return val;
+}
+
+
+inline void
+cusparseScsrgeam2(cusparseHandle_t         handle,
+                  int                      m,
+                  int                      n,
+                  const float*             alpha,
+                  int                      nnzA,
+                  const float*             csrSortedValA,
+                  const int*               csrSortedRowPtrA,
+                  const int*               csrSortedColIndA,
+                  const float*             beta,
+                  int                      nnzB,
+                  const float*             csrSortedValB,
+                  const int*               csrSortedRowPtrB,
+                  const int*               csrSortedColIndB,
+                  float*                   csrSortedValC,
+                  int*                     csrSortedRowPtrC,
+                  int*                     csrSortedColIndC,
+                  void*                    workspace,
+                  cudaStream_t stream) {
+
+	cusparseMatDescr_t descr = 0;
+	CUSPARSE_CHECK(cusparseCreateMatDescr(&descr));
+    cusparseSetMatType(descr,CUSPARSE_MATRIX_TYPE_GENERAL);
+    cusparseSetMatIndexBase(descr,CUSPARSE_INDEX_BASE_ZERO);
+
+	CUSPARSE_CHECK(cusparseSetStream(handle, stream));
+	CUSPARSE_CHECK(cusparseScsrgeam2(handle, m, n,
+            alpha, descr, nnzA, csrSortedValA, csrSortedRowPtrA, csrSortedColIndA,
+            beta, descr, nnzB, csrSortedValB, csrSortedRowPtrB, csrSortedColIndB,
+            descr, csrSortedValC, csrSortedRowPtrC, csrSortedColIndC,
+            workspace));
+
+	  CUDA_CHECK(cudaStreamSynchronize(stream));
+}
+
 /** @} */
 
 /**

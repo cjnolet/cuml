@@ -20,6 +20,8 @@
 
 #include "label/classlabels.h"
 
+#include "cusparse_wrappers.h"
+
 #include <thrust/device_ptr.h>
 #include <thrust/scan.h>
 
@@ -518,6 +520,22 @@ __global__ void csr_add_kernel(const int *a_ind, const int *a_indptr,
   }
 }
 
+
+inline size_t csr_add_calc_workspace(cusparseHandle_t handle, int m, int n,
+		int nnzA, const float *csrSortedValA, const int *csrSortedRowPtrA, const int * csrSortedColIndA,
+		int nnzB, const float *csrSortedValB, const int *csrSortedRowPtrB, const int *csrSortedColIndB,
+		const float *csrSortedValC, const int *csrSortedRowPtrC, const int *csrSortedColIndC,
+		cudaStream_t stream) {
+
+	float w = 1.0;
+
+	return cusparseScsrgeam2_bufferSizeExt(handle, m, n, &w,
+			nnzA, csrSortedValA, csrSortedRowPtrA, csrSortedColIndA, &w,
+			nnzB, csrSortedValB, csrSortedRowPtrB, csrSortedColIndB,
+			csrSortedValC, csrSortedRowPtrC, csrSortedColIndC, stream);
+}
+
+
 /**
  * @brief Calculate the CSR row_ind array that would result
  * from summing together two CSR matrices
@@ -534,36 +552,50 @@ __global__ void csr_add_kernel(const int *a_ind, const int *a_indptr,
  * @param d_alloc: deviceAllocator to use for temp memory
  * @param stream: cuda stream to use
  */
-template <typename T, int TPB_X = 32>
-size_t csr_add_calc_inds(const int *a_ind, const int *a_indptr, const T *a_val,
+
+inline size_t csr_add_calc_inds(cusparseHandle_t handle,
+						const int *a_ind, const int *a_indptr,
                          int nnz1, const int *b_ind, const int *b_indptr,
-                         const T *b_val, int nnz2, int m, int *out_ind,
+                         int nnz2, int m, int n, int *out_ind,
                          std::shared_ptr<deviceAllocator> d_alloc,
+                         void *workspace,
                          cudaStream_t stream) {
-  dim3 grid(ceildiv(m, TPB_X), 1, 1);
-  dim3 blk(TPB_X, 1, 1);
-
-  device_buffer<int> row_counts(d_alloc, stream, m + 1);
-  CUDA_CHECK(
-    cudaMemsetAsync(row_counts.data(), 0, (m + 1) * sizeof(int), stream));
-
-  csr_add_calc_row_counts_kernel<T, TPB_X>
-    <<<grid, blk, 0, stream>>>(a_ind, a_indptr, a_val, nnz1, b_ind, b_indptr,
-                               b_val, nnz2, m, row_counts.data());
-
-  int cnnz = 0;
-  MLCommon::updateHost(&cnnz, row_counts.data() + m, 1, stream);
-  CUDA_CHECK(cudaStreamSynchronize(stream));
-
-  // create csr compressed row index from row counts
-  thrust::device_ptr<int> row_counts_d =
-    thrust::device_pointer_cast(row_counts.data());
-  thrust::device_ptr<int> c_ind_d = thrust::device_pointer_cast(out_ind);
-  exclusive_scan(thrust::cuda::par.on(stream), row_counts_d, row_counts_d + m,
-                 c_ind_d);
-
-  return cnnz;
+	return cusparsecsrgeam2Nnz(handle, m, n, nnz1, a_indptr, a_ind,
+	                     nnz2, b_indptr, b_ind,
+	                     out_ind, workspace, stream);
 }
+
+
+//template <typename T, int TPB_X = 32>
+//size_t csr_add_calc_inds(const int *a_ind, const int *a_indptr, const T *a_val,
+//                         int nnz1, const int *b_ind, const int *b_indptr,
+//                         const T *b_val, int nnz2, int m, int *out_ind,
+//                         std::shared_ptr<deviceAllocator> d_alloc,
+//                         cudaStream_t stream) {
+//  dim3 grid(ceildiv(m, TPB_X), 1, 1);
+//  dim3 blk(TPB_X, 1, 1);
+//
+//  device_buffer<int> row_counts(d_alloc, stream, m + 1);
+//  CUDA_CHECK(
+//    cudaMemsetAsync(row_counts.data(), 0, (m + 1) * sizeof(int), stream));
+//
+//  csr_add_calc_row_counts_kernel<T, TPB_X>
+//    <<<grid, blk, 0, stream>>>(a_ind, a_indptr, a_val, nnz1, b_ind, b_indptr,
+//                               b_val, nnz2, m, row_counts.data());
+//
+//  int cnnz = 0;
+//  MLCommon::updateHost(&cnnz, row_counts.data() + m, 1, stream);
+//  CUDA_CHECK(cudaStreamSynchronize(stream));
+//
+//  // create csr compressed row index from row counts
+//  thrust::device_ptr<int> row_counts_d =
+//    thrust::device_pointer_cast(row_counts.data());
+//  thrust::device_ptr<int> c_ind_d = thrust::device_pointer_cast(out_ind);
+//  exclusive_scan(thrust::cuda::par.on(stream), row_counts_d, row_counts_d + m,
+//                 c_ind_d);
+//
+//  return cnnz;
+//}
 
 /**
  * @brief Calculate the CSR row_ind array that would result
@@ -582,19 +614,35 @@ size_t csr_add_calc_inds(const int *a_ind, const int *a_indptr, const T *a_val,
  * @param c_val: output data array
  * @param stream: cuda stream to use
  */
-template <typename T, int TPB_X = 32>
-void csr_add_finalize(const int *a_ind, const int *a_indptr, const T *a_val,
-                      int nnz1, const int *b_ind, const int *b_indptr,
-                      const T *b_val, int nnz2, int m, int *c_ind,
-                      int *c_indptr, T *c_val, cudaStream_t stream) {
-  dim3 grid(MLCommon::ceildiv(m, TPB_X), 1, 1);
-  dim3 blk(TPB_X, 1, 1);
 
-  csr_add_kernel<T, TPB_X>
-    <<<grid, blk, 0, stream>>>(a_ind, a_indptr, a_val, nnz1, b_ind, b_indptr,
-                               b_val, nnz2, m, c_ind, c_indptr, c_val);
-  CUDA_CHECK(cudaPeekAtLastError());
+template<typename T>
+inline void csr_add_finalize(cusparseHandle_t handle, int m, int n,
+		const int *a_ind, const int *a_indptr, const T *a_val, int nnz1,
+		const int *b_ind, const int *b_indptr, const T *b_val, int nnz2,
+              int *c_ind, int *c_indptr, T *c_val, void *workspace,
+                      cudaStream_t stream) {
+
+	float w = 1.0;
+
+	cusparseScsrgeam2(handle, m, n, &w,
+			nnz1, a_val, a_ind, a_indptr, &w,
+			nnz2, b_val, b_ind, b_indptr,
+			c_val, c_ind, c_indptr, workspace, stream);
 }
+
+//template <typename T, int TPB_X = 32>
+//void csr_add_finalize(const int *a_ind, const int *a_indptr, const T *a_val,
+//                      int nnz1, const int *b_ind, const int *b_indptr,
+//                      const T *b_val, int nnz2, int m, int *c_ind,
+//                      int *c_indptr, T *c_val, cudaStream_t stream) {
+//  dim3 grid(MLCommon::ceildiv(m, TPB_X), 1, 1);
+//  dim3 blk(TPB_X, 1, 1);
+//
+//  csr_add_kernel<T, TPB_X>
+//    <<<grid, blk, 0, stream>>>(a_ind, a_indptr, a_val, nnz1, b_ind, b_indptr,
+//                               b_val, nnz2, m, c_ind, c_indptr, c_val);
+//  CUDA_CHECK(cudaPeekAtLastError());
+//}
 
 template <typename T, int TPB_X = 32, typename Lambda = auto(T, T, T)->void>
 __global__ void csr_row_op_kernel(const T *row_ind, T n_rows, T nnz,
