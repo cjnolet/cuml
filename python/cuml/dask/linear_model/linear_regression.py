@@ -82,6 +82,7 @@ class LinearRegression(BaseEstimator,
         models = self._fit(model_func=LinearRegression._create_model,
                            data=(X, y))
 
+        self.internal_model = list(models.values())[0]
         return self
 
     def predict(self, X, delayed=True):

@@ -88,6 +88,8 @@ def test_ols(nrows, ncols, n_parts, fit_intercept,
 
         lr.fit(X_df, y_df)
 
+        print(str(lr.internal_model))
+
         ret = lr.predict(X_df, delayed=delayed)
 
         error_cuml = mean_squared_error(y, ret.compute().to_pandas().values)

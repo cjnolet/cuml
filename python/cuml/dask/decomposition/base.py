@@ -100,7 +100,7 @@ class DecompositionSyncFitMixin(object):
 
         comms.destroy()
 
-        self.local_model = list(models.values())[0].result()
+        self.internal_model = list(models.values())[0].result()
 
         if _transform:
             out_futures = flatten_grouped_results(self.client,

@@ -111,10 +111,6 @@ class MultinomialNB(BaseEstimator,
 
         self.datatype = "cupy"
 
-        # Make any potential model args available and catch any potential
-        # ValueErrors before distributed training begins.
-        self.local_model = MNB(**kwargs)
-
     @staticmethod
     @with_cupy_rmm
     def _fit(Xy, classes, kwargs):
@@ -184,14 +180,14 @@ class MultinomialNB(BaseEstimator,
                                      pure=False)
                   for w, part in futures.gpu_futures]
 
-        self.local_model = reduce(models,
+        self.internal_model = reduce(models,
                                   self._merge_counts_to_model,
                                   client=self.client)
-        self.local_model = self.client.submit(self._update_log_probs,
-                                              self.local_model,
+        self.internal_model = self.client.submit(self._update_log_probs,
+                                              self.internal_model,
                                               pure=False)
 
-        wait(self.local_model)
+        wait(self.internal_model)
 
         return self
 

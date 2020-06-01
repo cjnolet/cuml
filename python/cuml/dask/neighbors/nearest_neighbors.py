@@ -129,7 +129,6 @@ class NearestNeighbors(BaseEstimator):
         return n_neighbors
 
     def _create_models(self, comms):
-
         """
         Each Dask worker creates a single model
         """

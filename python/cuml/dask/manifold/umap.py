@@ -48,15 +48,15 @@ class UMAP(BaseEstimator,
                         n_parts=2,
                         output='array')
 
-        local_model = UMAP()
+        internal_model = UMAP()
 
         selection = np.random.choice(1000, 100)
         X_train = X[selection].compute()
         y_train = y[selection].compute()
 
-        local_model.fit(X_train, y=y_train)
+        internal_model.fit(X_train, y=y_train)
 
-        distributed_model = MNMG_UMAP(local_model)
+        distributed_model = MNMG_UMAP(internal_model)
         embedding = distributed_model.transform(X)
 
     Note: Everytime this code is run, the output will be different because
@@ -91,7 +91,7 @@ class UMAP(BaseEstimator,
     """
     def __init__(self, model, client=None, **kwargs):
         super(UMAP, self).__init__(client, **kwargs)
-        self.local_model = model
+        self.internal_model = model
 
     def transform(self, X, convert_dtype=True):
         """

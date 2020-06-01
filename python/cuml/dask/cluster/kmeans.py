@@ -144,8 +144,7 @@ class KMeans(BaseEstimator, DelayedPredictionMixin, DelayedTransformMixin):
 
         comms.destroy()
 
-        self.local_model = kmeans_fit[0].result()
-        self.cluster_centers_ = self.local_model.cluster_centers_
+        self.internal_model = kmeans_fit[0]
 
         return self
 

@@ -73,8 +73,6 @@ class Ridge(BaseEstimator,
                                     verbose=verbose,
                                     **kwargs)
 
-        self.coef_ = None
-        self.intercept_ = None
         self._model_fit = False
         self._consec_call = 0
 
@@ -91,7 +89,7 @@ class Ridge(BaseEstimator,
         """
 
         models = self._fit(model_func=Ridge._create_model, data=(X, y))
-
+        self.internal_model = list(models.values())[0]
         return self
 
     def predict(self, X, delayed=True):
