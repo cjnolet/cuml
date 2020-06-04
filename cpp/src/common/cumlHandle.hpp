@@ -32,6 +32,7 @@
 #include <cuml/cuml.hpp>
 
 #include <cuml/common/cuml_allocator.hpp>
+#include <raft.hpp>
 
 namespace ML {
 
@@ -58,6 +59,8 @@ class cumlHandle_impl {
   cusolverSpHandle_t getcusolverSpHandle() const;
   cusparseHandle_t getcusparseHandle() const;
 
+  raft::handle_t getRaftHandle() const;
+
   cudaStream_t getInternalStream(int sid) const;
   int getNumInternalStreams() const;
 
@@ -78,6 +81,8 @@ class cumlHandle_impl {
   mutable cusolverDnHandle_t _cusolverDn_handle;
   mutable cusolverSpHandle_t _cusolverSp_handle;
   mutable cusparseHandle_t _cusparse_handle;
+  mutable raft::handle_t _raft_handle;
+
   cudaStream_t _userStream;
   cudaEvent_t _event;
   std::shared_ptr<deviceAllocator> _deviceAllocator;

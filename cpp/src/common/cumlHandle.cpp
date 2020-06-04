@@ -75,6 +75,7 @@ cumlHandle_impl::cumlHandle_impl(int n_streams)
     _cusolverDn_handle(),
     _cusolverSp_handle(),
     _cusparse_handle(),
+    _raft_handle(n_streams),
     _userStream(nullptr),
     _event(),
     _deviceAllocator(std::make_shared<defaultDeviceAllocator>()),
@@ -162,6 +163,10 @@ cusparseHandle_t cumlHandle_impl::getcusparseHandle() const {
   return _cusparse_handle;
 }
 
+raft::handle_t cumlHandle_impl::getRaftHandle() const {
+	return _raft_handle;
+}
+
 cudaStream_t cumlHandle_impl::getInternalStream(int sid) const {
   return _streams[sid];
 }
@@ -214,6 +219,9 @@ void cumlHandle_impl::createResources() {
     CUDA_CHECK(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
     _streams.push_back(stream);
   }
+
+  _raft_hande.set_stream(this->getStream());
+
   CUDA_CHECK(cudaEventCreateWithFlags(&_event, cudaEventDisableTiming));
 }
 
